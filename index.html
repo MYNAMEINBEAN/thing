@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login & Sign Up</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom styles for Inter font and general body styling */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f0f2f5; /* Light gray background */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh; /* Full viewport height */
+            margin: 0;
+            padding: 20px; /* Add some padding for smaller screens */
+            box-sizing: border-box; /* Include padding in element's total width and height */
+        }
+        /* Ensure the main container is responsive */
+        .container {
+            max-width: 450px; /* Max width for desktop */
+            width: 100%; /* Full width on smaller screens */
+        }
+        /* Hide forms by default, show based on active tab */
+        .form-section {
+            display: none;
+        }
+        .form-section.active {
+            display: block;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 flex items-center justify-center min-h-screen">
+    <div class="container bg-white p-8 rounded-xl shadow-lg border border-gray-200">
+        <h1 class="text-3xl font-bold text-center text-gray-800 mb-6">Welcome!</h1>
+
+        <!-- Tab Navigation -->
+        <div class="flex justify-center mb-6">
+            <button id="showLoginBtn" class="px-6 py-3 rounded-l-xl text-lg font-semibold transition-all duration-300 ease-in-out bg-blue-600 text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50">
+                Log In
+            </button>
+            <button id="showSignupBtn" class="px-6 py-3 rounded-r-xl text-lg font-semibold transition-all duration-300 ease-in-out bg-gray-200 text-gray-700 hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-opacity-50">
+                Sign Up
+            </button>
+        </div>
+
+        <!-- Message Display Area -->
+        <div id="message" class="bg-blue-100 border border-blue-400 text-blue-700 px-4 py-3 rounded-lg relative mb-6 hidden" role="alert">
+            <span class="block sm:inline" id="messageText"></span>
+        </div>
+
+        <!-- Login Form Section -->
+        <div id="loginForm" class="form-section active">
+            <h2 class="text-2xl font-semibold text-gray-700 mb-5 text-center">Log In to Your Account</h2>
+            <div class="mb-4">
+                <label for="loginUsername" class="block text-gray-700 text-sm font-bold mb-2">Username:</label>
+                <input type="text" id="loginUsername" name="loginUsername" placeholder="Enter your username"
+                       class="shadow appearance-none border rounded-lg w-full py-3 px-4 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition duration-200 ease-in-out">
+            </div>
+            <div class="mb-6">
+                <label for="loginPassword" class="block text-gray-700 text-sm font-bold mb-2">Password:</label>
+                <input type="password" id="loginPassword" name="loginPassword" placeholder="Enter your password"
+                       class="shadow appearance-none border rounded-lg w-full py-3 px-4 text-gray-700 mb-3 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition duration-200 ease-in-out">
+            </div>
+            <button id="loginBtn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg w-full focus:outline-none focus:shadow-outline transition-all duration-300 ease-in-out transform hover:scale-105">
+                Log In
+            </button>
+        </div>
+
+        <!-- Sign Up Form Section -->
+        <div id="signupForm" class="form-section">
+            <h2 class="text-2xl font-semibold text-gray-700 mb-5 text-center">Create a New Account</h2>
+            <div class="mb-4">
+                <label for="signupUsername" class="block text-gray-700 text-sm font-bold mb-2">Username:</label>
+                <input type="text" id="signupUsername" name="signupUsername" placeholder="Choose a username"
+                       class="shadow appearance-none border rounded-lg w-full py-3 px-4 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition duration-200 ease-in-out">
+            </div>
+            <div class="mb-6">
+                <label for="signupPassword" class="block text-gray-700 text-sm font-bold mb-2">Password:</label>
+                <input type="password" id="signupPassword" name="signupPassword" placeholder="Create a password"
+                       class="shadow appearance-none border rounded-lg w-full py-3 px-4 text-gray-700 mb-3 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition duration-200 ease-in-out">
+            </div>
+            <button id="signupBtn" class="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg w-full focus:outline-none focus:shadow-outline transition-all duration-300 ease-in-out transform hover:scale-105">
+                Sign Up
+            </button>
+        </div>
+
+        <!-- Play as Guest Button -->
+        <div class="mt-6 border-t border-gray-200 pt-6">
+            <button id="playAsGuestBtn" class="bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-6 rounded-lg w-full focus:outline-none focus:shadow-outline transition-all duration-300 ease-in-out transform hover:scale-105">
+                Play as Guest
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // Get references to elements
+        const loginForm = document.getElementById('loginForm');
+        const signupForm = document.getElementById('signupForm');
+        const showLoginBtn = document.getElementById('showLoginBtn');
+        const showSignupBtn = document.getElementById('showSignupBtn');
+        const messageBox = document.getElementById('message');
+        const messageText = document.getElementById('messageText');
+
+        const loginUsernameInput = document.getElementById('loginUsername');
+        const loginPasswordInput = document.getElementById('loginPassword');
+        const signupUsernameInput = document.getElementById('signupUsername');
+        const signupPasswordInput = document.getElementById('signupPassword');
+        const playAsGuestBtn = document.getElementById('playAsGuestBtn');
+
+        // Define the backend API base URL
+        const API_BASE_URL = 'http://10.31.11.3:5000'; // Use your local IP for testing
+
+        // Function to display messages
+        function showMessage(text, type = 'info') {
+            messageText.textContent = text;
+            messageBox.classList.remove('hidden', 'bg-blue-100', 'border-blue-400', 'text-blue-700', 'bg-red-100', 'border-red-400', 'text-red-700', 'bg-green-100', 'border-green-400', 'text-green-700');
+            if (type === 'info') {
+                messageBox.classList.add('bg-blue-100', 'border-blue-400', 'text-blue-700');
+            } else if (type === 'error') {
+                messageBox.classList.add('bg-red-100', 'border-red-400', 'text-red-700');
+            } else if (type === 'success') {
+                messageBox.classList.add('bg-green-100', 'border-green-400', 'text-green-700');
+            }
+            messageBox.classList.remove('hidden');
+            setTimeout(() => {
+                messageBox.classList.add('hidden');
+            }, 5000); // Hide message after 5 seconds
+        }
+
+        // Function to switch between login and signup forms
+        function showForm(formType) {
+            if (formType === 'login') {
+                loginForm.classList.add('active');
+                signupForm.classList.remove('active');
+                showLoginBtn.classList.add('bg-blue-600', 'text-white');
+                showLoginBtn.classList.remove('bg-gray-200', 'text-gray-700');
+                showSignupBtn.classList.add('bg-gray-200', 'text-gray-700');
+                showSignupBtn.classList.remove('bg-blue-600', 'text-white');
+            } else {
+                signupForm.classList.add('active');
+                loginForm.classList.remove('active');
+                showSignupBtn.classList.add('bg-blue-600', 'text-white');
+                showSignupBtn.classList.remove('bg-gray-200', 'text-gray-700');
+                showLoginBtn.classList.add('bg-gray-200', 'text-gray-700');
+                showLoginBtn.classList.remove('bg-blue-600', 'text-white');
+            }
+            // Clear any previous messages when switching forms
+            messageBox.classList.add('hidden');
+        }
+
+        // Event listeners for tab buttons
+        showLoginBtn.addEventListener('click', () => showForm('login'));
+        showSignupBtn.addEventListener('click', () => showForm('signup'));
+
+        // --- Frontend Logic for actual backend interaction ---
+
+        document.getElementById('signupBtn').addEventListener('click', async () => {
+            const username = signupUsernameInput.value.trim();
+            const password = signupPasswordInput.value.trim();
+
+            if (!username || !password) {
+                showMessage("Username and password cannot be empty.", 'error');
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/signup`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ username, password })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) { // Check if status code is 2xx
+                    showMessage(data.message, 'success');
+                    signupUsernameInput.value = '';
+                    signupPasswordInput.value = '';
+                    
+                    // Redirect to play.html with the session token
+                    window.location.href = `/play.html?token=${data.token}`;
+                } else {
+                    showMessage(data.message || "Signup failed.", 'error');
+                }
+            } catch (error) {
+                console.error('Error during signup:', error);
+                showMessage("Could not connect to the server. Please ensure the backend is running.", 'error');
+            }
+        });
+
+        document.getElementById('loginBtn').addEventListener('click', async () => {
+            const username = loginUsernameInput.value.trim();
+            const password = loginPasswordInput.value.trim();
+
+            if (!username || !password) {
+                showMessage("Username and password cannot be empty.", 'error');
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/login`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ username, password })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) { // Check if status code is 2xx
+                    showMessage(data.message, 'success');
+                    loginUsernameInput.value = '';
+                    loginPasswordInput.value = '';
+                    // Redirect to play.html with the session token
+                    window.location.href = `/play.html?token=${data.token}`;
+                } else {
+                    showMessage(data.message || "Invalid username or password.", 'error');
+                }
+            } catch (error) {
+                console.error('Error during login:', error);
+                showMessage("Could not connect to the server. Please ensure the backend is running.", 'error');
+            }
+        });
+
+        // --- Play as Guest Logic ---
+        playAsGuestBtn.addEventListener('click', async () => {
+            showMessage(`Attempting to play as guest...`, 'info');
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/guest_login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    showMessage(data.message, 'success');
+                    // Redirect to play.html with the session token
+                    window.location.href = `/play.html?token=${data.token}`;
+                } else {
+                    showMessage(`Failed to play as guest: ${data.message || 'Unknown error'}`, 'error');
+                }
+            } catch (error) {
+                console.error('Error during guest login:', error);
+                showMessage("Could not connect to the server for guest login. Please ensure the backend is running.", 'error');
+            }
+        });
+
+
+        // Initialize by showing the login form
+        showForm('login');
+    </script>
+</body>
+</html>

@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Game Lobby</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Socket.IO Client CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.0/socket.io.min.js"></script>
+    <!-- Link to your custom CSS file in the static folder (if you have one) -->
+    <link rel="stylesheet" href="/static/css/style.css">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #000000; /* Black background */
+            color: #e2e8f0; /* Light text color */
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        .header {
+            width: 100%;
+            max-width: 1200px;
+            display: flex;
+            justify-content: flex-end; /* Push user info to the right */
+            align-items: center;
+            padding: 16px 0;
+            margin-bottom: 24px;
+        }
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+        .coins-display {
+            background-color: #fcd34d; /* Amber-300 */
+            color: #78350f; /* Amber-900 */
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-weight: bold;
+            font-size: 1em;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .logout-btn {
+            background-color: #ef4444; /* Red-500 */
+            color: white;
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-weight: bold;
+            transition: background-color 0.3s;
+        }
+        .logout-btn:hover {
+            background-color: #dc2626; /* Red-600 */
+        }
+        .main-content {
+            width: 100%;
+            max-width: 1200px;
+            text-align: left;
+            margin-bottom: 40px;
+            display: flex;
+            flex-direction: column;
+            align-items: center; /* Center content horizontally */
+        }
+        .game-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 24px;
+            width: 100%;
+            max-width: 400px; /* Constrain width for single game card */
+            justify-content: center; /* Center the grid items */
+        }
+        .game-card {
+            background-color: #2d3748; /* Darker gray for cards */
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            transition: transform 0.2s ease-in-out;
+        }
+        .game-card:hover {
+            transform: translateY(-5px);
+        }
+        .game-icon {
+            font-size: 2.5em;
+            color: #63b3ed; /* Blue icon */
+            margin-bottom: 16px;
+        }
+        .game-title {
+            font-size: 1.5em;
+            font-weight: bold;
+            color: #e2e8f0;
+            margin-bottom: 8px;
+        }
+        .game-description {
+            font-size: 0.9em;
+            color: #a0aec0; /* Light gray description */
+            margin-bottom: 16px;
+            flex-grow: 1; /* Pushes button to bottom */
+        }
+        .join-game-btn {
+            background-color: #4299e1; /* Blue-500 */
+            color: white;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-weight: bold;
+            transition: background-color 0.3s;
+            width: 100%;
+            text-align: center;
+        }
+        .join-game-btn:hover {
+            background-color: #3182ce; /* Blue-600 */
+        }
+
+        /* Custom Modal Styles */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.75);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        .modal-content {
+            background-color: #2d3748; /* Darker gray for modal */
+            color: #e2e8f0;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+            max-width: 400px;
+            width: 90%;
+            text-align: center;
+        }
+        .modal-buttons {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin-top: 25px;
+        }
+        .modal-button {
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+        .modal-button.yes {
+            background-color: #48bb78; /* Green-500 */
+            color: white;
+        }
+        .modal-button.yes:hover {
+            background-color: #38a169; /* Green-600 */
+        }
+        .modal-button.no {
+            background-color: #ef4444; /* Red-500 */
+            color: white;
+        }
+        .modal-button.no:hover {
+            background-color: #dc2626; /* Red-600 */
+        }
+
+        /* Styles for the iframe container */
+        .iframe-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #1a202c; /* Match body background */
+            z-index: 999; /* Below modal, above lobby */
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+        .iframe-container iframe {
+            width: 100%;
+            height: calc(100% - 60px); /* Adjust for back button */
+            border: none;
+        }
+        .iframe-back-button {
+            background-color: #4a5568; /* Gray-600 */
+            color: white;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-weight: bold;
+            margin-bottom: 10px; /* Space from iframe */
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+        .iframe-back-button:hover {
+            background-color: #2d3748; /* Gray-700 */
+        }
+    </style>
+</head>
+<body>
+    <div id="lobbyContainer">
+        <div class="header">
+            <div class="user-info">
+                <span id="onlineUsersHeader" class="text-gray-400"><span id="totalOnlineCount">0</span> Online</span>
+                <div class="coins-display">
+                    Coins: <span id="coinCount">0</span>
+                </div>
+                <span id="welcomeMessage" class="font-semibold text-white"></span>
+                <button id="logoutBtn" class="logout-btn hidden">Log Out</button>
+            </div>
+        </div>
+
+        <div class="main-content">
+            <h1 class="text-4xl font-bold text-white mb-4">Game Lobby</h1>
+            <p class="text-lg text-gray-400 mb-8">Choose a game and challenge players online. Good luck!</p>
+
+            <div class="game-grid">
+                <!-- Tic-Tac-Toe Card -->
+                <div class="game-card">
+                    <span class="game-icon"> crosses </span> <!-- Using an emoji for the icon -->
+                    <h2 class="game-title">Tic-Tac-Toe</h2>
+                    <p class="game-description">A classic duel of Xs and Os.</p>
+                    <p class="text-sm text-gray-500 mb-4"><span id="ticTacToeOnline">0</span> Players in Queue</p>
+                    <button id="ticTacToeBtn" class="join-game-btn">Join Game</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Custom Modal for AI confirmation -->
+    <div id="aiConfirmModal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <p class="text-lg mb-6">No players found. Play against AI?</p>
+            <div class="modal-buttons">
+                <button id="confirmAiYes" class="modal-button yes">Yes</button>
+                <button id="confirmAiNo" class="modal-button no">No</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Iframe Container for Game -->
+    <div id="gameIframeContainer" class="iframe-container hidden">
+        <button id="backToLobbyBtn" class="iframe-back-button">← Back to Lobby</button>
+        <iframe id="gameIframe" src="" frameborder="0"></iframe>
+    </div>
+
+
+    <script>
+        const welcomeMessage = document.getElementById('welcomeMessage');
+        const coinCountDisplay = document.getElementById('coinCount');
+        const ticTacToeBtn = document.getElementById('ticTacToeBtn');
+        const logoutBtn = document.getElementById('logoutBtn');
+        const totalOnlineCount = document.getElementById('totalOnlineCount');
+        const ticTacToeOnline = document.getElementById('ticTacToeOnline');
+
+        const aiConfirmModal = document.getElementById('aiConfirmModal');
+        const confirmAiYesBtn = document.getElementById('confirmAiYes');
+        const confirmAiNoBtn = document.getElementById('confirmAiNo');
+
+        const lobbyContainer = document.getElementById('lobbyContainer');
+        const gameIframeContainer = document.getElementById('gameIframeContainer');
+        const gameIframe = document.getElementById('gameIframe');
+        const backToLobbyBtn = document.getElementById('backToLobbyBtn');
+
+
+        const API_BASE_URL = 'http://10.31.11.3:5000';
+        const socket = io(API_BASE_URL);
+
+        let matchmakingTimeoutId;
+        let userSessionToken = null; // Stores the session token
+        let currentUsername = null;   // Stores the username for the current session
+        let sidRegistered = false; // Flag to track SID registration status
+
+        // Function to parse URL parameters
+        function getQueryParams() {
+            const params = {};
+            window.location.search.substring(1).split('&').forEach(param => {
+                const parts = param.split('=');
+                if (parts[0]) {
+                    params[parts[0]] = decodeURIComponent(parts[1] || '');
+                }
+            });
+            return params;
+        }
+
+        // --- Socket.IO Event Listeners ---
+        socket.on('connect', () => {
+            console.log('Socket.IO connected. SID:', socket.id);
+            // If we have a token, register the SID with it
+            if (userSessionToken && currentUsername) {
+                console.log('Emitting register_user_sid on connect for:', currentUsername);
+                socket.emit('register_user_sid', { token: userSessionToken, username: currentUsername });
+            } else {
+                console.warn('Session token or username not available on connect. SID registration deferred.');
+            }
+        });
+
+        socket.on('disconnect', () => {
+            console.log('Disconnected from Socket.IO server');
+            sidRegistered = false; // Reset flag on disconnect
+        });
+
+        socket.on('online_users_count', (data) => {
+            totalOnlineCount.textContent = data.total;
+        });
+
+        socket.on('tic_tac_toe_online_players', (data) => {
+            ticTacToeOnline.textContent = data.count;
+        });
+
+        socket.on('matchmaking_status', (data) => {
+            ticTacToeBtn.textContent = data.message;
+        });
+
+        socket.on('match_found', (data) => {
+            clearTimeout(matchmakingTimeoutId);
+            ticTacToeBtn.textContent = 'Match Found!';
+            ticTacToeBtn.disabled = false;
+
+            lobbyContainer.classList.add('hidden');
+            gameIframeContainer.classList.remove('hidden');
+            // Pass game details AND the session token to the multiplayer game
+            gameIframe.src = `/tick-tack-toe/multiplayer.html?game_id=${data.game_id}&player_char=${data.player_char}&opponent_username=${data.opponent_username}&token=${userSessionToken}&username=${currentUsername}`;
+        });
+
+        socket.on('coins_updated', (data) => {
+            // Update the lobby's coin display if it's the current user's coins
+            if (currentUsername === data.username) {
+                coinCountDisplay.textContent = data.new_coins;
+                // No alert here, as the game iframe itself might show a win message.
+            }
+        });
+
+        socket.on('session_invalid', (data) => {
+            alert(data.message);
+            // Force re-login if session is invalid
+            window.location.href = '/';
+        });
+
+        // NEW: Listen for SID registration acknowledgement from the backend
+        socket.on('ack_sid_registered', (data) => {
+            console.log('SID registered successfully:', data.message);
+            sidRegistered = true; // Set the flag to true
+            // If the button was disabled waiting for this, re-enable it here
+            ticTacToeBtn.disabled = false;
+            ticTacToeBtn.textContent = 'Join Game'; // Reset button text
+        });
+
+        // --- UI Update Functions ---
+        function updateUI(username, coins, isGuest = false) {
+            if (isGuest) {
+                welcomeMessage.textContent = "You're playing as guest";
+            } else {
+                welcomeMessage.textContent = `Welcome, ${username}`;
+            }
+            coinCountDisplay.textContent = coins;
+            logoutBtn.classList.remove('hidden');
+        }
+
+        // --- Session Check and Initialization ---
+        async function checkSessionAndInitialize() {
+            const params = getQueryParams();
+            const token = params.token;
+
+            if (!token) {
+                // No token, redirect to login page
+                alert("No session found. Please log in.");
+                window.location.href = '/';
+                return;
+            }
+
+            userSessionToken = token; // Store the token globally
+            sidRegistered = false; // Reset the flag for a new session check
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/check_session?token=${encodeURIComponent(token)}`);
+                const data = await response.json();
+
+                if (response.ok) {
+                    currentUsername = data.username; // Store username globally
+                    const isGuest = currentUsername.startsWith('guest');
+                    updateUI(currentUsername, data.coins, isGuest);
+
+                    // Emit SID registration after successful session check
+                    // This will be handled by the 'connect' event listener if socket is not yet connected
+                    // or immediately if it is. The 'ack_sid_registered' will then set sidRegistered = true.
+                    if (socket.connected) {
+                        console.log('Emitting register_user_sid after session check for:', currentUsername);
+                        socket.emit('register_user_sid', { token: userSessionToken, username: currentUsername });
+                    } else {
+                        console.warn('Socket not connected after session check. SID registration deferred to connect event.');
+                    }
+                } else {
+                    alert(data.message || "Session invalid. Please log in again.");
+                    window.location.href = '/';
+                }
+            } catch (error) {
+                console.error('Network error during session check:', error);
+                alert("Could not connect to the server. Please ensure the backend is running.");
+                window.location.href = '/'; // Redirect to login on critical error
+            }
+        }
+
+        // --- Event Listeners ---
+        logoutBtn.addEventListener('click', async () => {
+            if (!userSessionToken) {
+                alert("No active session to log out.");
+                window.location.href = '/';
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/logout`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ token: userSessionToken })
+                });
+
+                const data = await response.json();
+                if (response.ok) {
+                    alert(data.message);
+                } else {
+                    alert(`Logout failed: ${data.message}`);
+                }
+            } catch (error) {
+                console.error('Error during logout:', error);
+                alert("Network error during logout.");
+            } finally {
+                userSessionToken = null;
+                currentUsername = null;
+                window.location.href = '/'; // Always redirect to login page after logout attempt
+            }
+        });
+
+        ticTacToeBtn.addEventListener('click', () => {
+            if (!userSessionToken || !currentUsername) {
+                alert("You are not logged in. Please log in or play as guest.");
+                window.location.href = '/';
+                return;
+            }
+
+            if (!socket.connected) {
+                alert("Not connected to game server. Please wait or refresh.");
+                console.error("Socket not connected when trying to join game.");
+                return;
+            }
+
+            // NEW: Check if SID is registered before attempting to join a game
+            if (!sidRegistered) {
+                alert("Still connecting to game server. Please wait a moment and try again.");
+                console.warn("Attempted to join game before SID was registered.");
+                // Re-emit register_user_sid here to prompt registration if it somehow failed or was deferred
+                socket.emit('register_user_sid', { token: userSessionToken, username: currentUsername });
+                return;
+            }
+
+            ticTacToeBtn.textContent = 'Searching for opponent...';
+            ticTacToeBtn.disabled = true;
+
+            // Pass the session token with the join request
+            socket.emit('join_multiplayer_game', { token: userSessionToken });
+
+            matchmakingTimeoutId = setTimeout(() => {
+                ticTacToeBtn.textContent = 'Join Game';
+                ticTacToeBtn.disabled = false;
+                aiConfirmModal.classList.remove('hidden');
+            }, 10000);
+        });
+
+        confirmAiYesBtn.addEventListener('click', () => {
+            aiConfirmModal.classList.add('hidden');
+            lobbyContainer.classList.add('hidden');
+            gameIframeContainer.classList.remove('hidden');
+            gameIframe.src = `/tick-tac-toe/ai.html?token=${userSessionToken}&username=${currentUsername}`; // Pass token to AI game
+        });
+
+        confirmAiNoBtn.addEventListener('click', () => {
+            aiConfirmModal.classList.add('hidden');
+        });
+
+        // Listener for messages coming from the iframe
+        window.addEventListener('message', async (event) => {
+            if (event.origin === API_BASE_URL || event.origin === "null") {
+                if (event.data && event.data.type === 'returnToLobby') {
+                    console.log("Received 'returnToLobby' message from iframe.");
+                    gameIframeContainer.classList.add('hidden');
+                    gameIframe.src = '';
+                    lobbyContainer.classList.remove('hidden');
+                    // Re-check session to refresh UI and online counts
+                    await checkSessionAndInitialize();
+                } else if (event.data && event.data.type === 'gameWin') {
+                    // This handles wins from the AI game iframe
+                    // The AI game will send username and coins directly.
+                    // We need to ensure the backend update_coins_api uses the token now.
+                    if (userSessionToken && currentUsername) {
+                        try {
+                            const response = await fetch(`${API_BASE_URL}/update_coins`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ token: userSessionToken, coins: event.data.coins })
+                            });
+                            const data = await response.json();
+                            if (response.ok) {
+                                coinCountDisplay.textContent = data.new_coins; // Update UI with new coins
+                                alert(`Congratulations! You won ${event.data.coins} coins!`);
+                            } else {
+                                console.error("Failed to update coins from AI game:", data.message);
+                            }
+                        } catch (error) {
+                            console.error("Network error updating coins from AI game:", error);
+                        }
+                    }
+                } else if (event.data && event.data.type === 'updateLobbyCoins') {
+                    // This message comes from the multiplayer game to update coins
+                    coinCountDisplay.textContent = event.data.newCoins;
+                }
+            }
+        });
+
+        backToLobbyBtn.addEventListener('click', () => {
+            if (gameIframe.contentWindow) {
+                // Tell the iframe game to leave its session/room on the backend
+                gameIframe.contentWindow.postMessage({ type: 'leaveGame', token: userSessionToken }, '*');
+            }
+            gameIframeContainer.classList.add('hidden');
+            gameIframe.src = '';
+            lobbyContainer.classList.remove('hidden');
+            checkSessionAndInitialize(); // Re-check session to refresh UI and online counts
+        });
+
+
+        // Initial check when the page loads
+        document.addEventListener('DOMContentLoaded', checkSessionAndInitialize);
+    </script>
+</body>
+</html>
