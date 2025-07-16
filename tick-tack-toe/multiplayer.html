@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tic-Tac-Toe Multiplayer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.0/socket.io.min.js"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #1a202c; /* Dark background */
+            color: #e2e8f0; /* Light text color */
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        .game-board {
+            display: grid;
+            grid-template-columns: repeat(3, 100px);
+            grid-template-rows: repeat(3, 100px);
+            gap: 5px;
+            background-color: #4a5568; /* Gray-600 */
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+        }
+        .cell {
+            width: 100px;
+            height: 100px;
+            background-color: #2d3748; /* Darker gray for cells */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 3em;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background-color 0.2s ease-in-out;
+            color: #e2e8f0;
+        }
+        .cell:hover:not(.x):not(.o) {
+            background-color: #4a5568; /* Lighter gray on hover */
+        }
+        .cell.x {
+            color: #4299e1; /* Blue for X */
+        }
+        .cell.o {
+            color: #ef4444; /* Red for O */
+        }
+        .status-message {
+            margin-top: 20px;
+            font-size: 1.5em;
+            font-weight: bold;
+            color: #e2e8f0;
+        }
+        .reset-button {
+            background-color: #4299e1;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-weight: bold;
+            margin-top: 20px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+        .reset-button:hover {
+            background-color: #3182ce;
+        }
+        .player-info {
+            margin-bottom: 10px;
+            font-size: 1.1em;
+            color: #a0aec0;
+        }
+    </style>
+</head>
+<body>
+    <h1 class="text-3xl font-bold text-white mb-4">Tic-Tac-Toe Multiplayer</h1>
+    <p id="playerInfo" class="player-info"></p>
+
+    <div class="game-board" id="gameBoard">
+        <div class="cell" data-index="0"></div>
+        <div class="cell" data-index="1"></div>
+        <div class="cell" data-index="2"></div>
+        <div class="cell" data-index="3"></div>
+        <div class="cell" data-index="4"></div>
+        <div class="cell" data-index="5"></div>
+        <div class="cell" data-index="6"></div>
+        <div class="cell" data-index="7"></div>
+        <div class="cell" data-index="8"></div>
+    </div>
+
+    <div id="statusMessage" class="status-message"></div>
+    <button id="resetButton" class="reset-button hidden">Play Again</button>
+
+    <script>
+        const cells = document.querySelectorAll('.cell');
+        const statusMessage = document.getElementById('statusMessage');
+        const resetButton = document.getElementById('resetButton');
+        const playerInfo = document.getElementById('playerInfo');
+
+        const API_BASE_URL = 'http://10.31.11.3:5000'; // Use your local IP for testing
+        const socket = io(API_BASE_URL); // Connect to Socket.IO server
+
+        let gameId = null;
+        let playerChar = null; // 'X' or 'O'
+        let opponentUsername = null;
+        let currentTurn = null; // 'X' or 'O'
+        let gameActive = false;
+        let userSessionToken = null; // Stores the session token
+        let currentUsername = null; // Stores the username for the current session
+
+        // Function to parse URL parameters
+        function getQueryParams() {
+            const params = {};
+            window.location.search.substring(1).split('&').forEach(param => {
+                const parts = param.split('=');
+                if (parts[0]) {
+                    params[parts[0]] = decodeURIComponent(parts[1] || '');
+                }
+            });
+            return params;
+        }
+
+        // Parse URL parameters immediately when the script loads
+        const initialParams = getQueryParams();
+        userSessionToken = initialParams.token;
+        currentUsername = initialParams.username;
+        gameId = initialParams.game_id;
+        playerChar = initialParams.player_char;
+        opponentUsername = initialParams.opponent_username;
+        currentTurn = 'X'; // X always starts for new games
+
+        // --- Socket.IO Event Listeners ---
+        socket.on('connect', () => {
+            console.log('Connected to Socket.IO server from multiplayer game. SID:', socket.id);
+            // Now that the socket is connected, and session info is parsed, register SID
+            if (userSessionToken && currentUsername) {
+                console.log('Multiplayer game emitting register_user_sid on connect for:', currentUsername);
+                socket.emit('register_user_sid', { token: userSessionToken, username: currentUsername });
+            } else {
+                console.error('Critical Error: Session token or username missing on Socket.IO connect. Cannot register SID.');
+                statusMessage.textContent = 'Error: Session missing. Please return to lobby.';
+                resetButton.classList.remove('hidden');
+                resetButton.textContent = 'Return to Lobby';
+                setTimeout(() => {
+                    if (window.parent) {
+                        window.parent.postMessage({ type: 'returnToLobby' }, '*');
+                    } else {
+                        window.location.href = '/';
+                    }
+                }, 3000);
+            }
+        });
+
+        socket.on('disconnect', () => {
+            console.log('Disconnected from Socket.IO server');
+            statusMessage.textContent = 'Disconnected from server. Please return to lobby.';
+            gameActive = false;
+            resetButton.classList.remove('hidden');
+            // Inform parent window to go back to lobby
+            if (window.parent) {
+                window.parent.postMessage({ type: 'returnToLobby' }, '*');
+            }
+        });
+
+        socket.on('match_found', (data) => {
+            gameId = data.game_id;
+            playerChar = data.player_char;
+            opponentUsername = data.opponent_username;
+            currentTurn = 'X'; // X always starts
+
+            gameActive = true;
+            statusMessage.textContent = `It's ${currentTurn}'s turn`;
+            playerInfo.textContent = `You are ${playerChar}. Opponent: ${opponentUsername}`;
+            console.log('Match found:', data);
+            // Re-enable cells for clicking if it's player's turn
+            if (currentTurn === playerChar) {
+                cells.forEach(cell => cell.addEventListener('click', handleCellClick));
+            } else {
+                cells.forEach(cell => cell.removeEventListener('click', handleCellClick));
+            }
+        });
+
+        socket.on('game_state', (data) => {
+            // Update board
+            data.board.forEach((char, index) => {
+                cells[index].textContent = char;
+                cells[index].classList.remove('x', 'o');
+                if (char) {
+                    cells[index].classList.add(char.toLowerCase());
+                }
+            });
+            currentTurn = data.turn;
+            statusMessage.textContent = `It's ${currentTurn}'s turn`;
+            gameActive = true; // Ensure game is active
+
+            // Re-enable cells for clicking if it's player's turn
+            if (currentTurn === playerChar) {
+                cells.forEach(cell => cell.addEventListener('click', handleCellClick));
+            } else {
+                cells.forEach(cell => cell.removeEventListener('click', handleCellClick));
+            }
+        });
+
+        socket.on('game_over', (data) => {
+            gameActive = false;
+            if (data.winner === 'draw') {
+                statusMessage.textContent = 'Game ended in a draw!';
+            } else {
+                statusMessage.textContent = `${data.winner} has won!`;
+            }
+            // Final board update
+            data.board.forEach((char, index) => {
+                cells[index].textContent = char;
+                cells[index].classList.remove('x', 'o');
+                if (char) {
+                    cells[index].classList.add(char.toLowerCase());
+                }
+            });
+            resetButton.classList.remove('hidden');
+            cells.forEach(cell => cell.removeEventListener('click', handleCellClick)); // Disable further moves
+        });
+
+        socket.on('opponent_disconnected', (data) => {
+            gameActive = false;
+            statusMessage.textContent = data.message;
+            resetButton.classList.remove('hidden'); // Option to return to lobby
+            cells.forEach(cell => cell.removeEventListener('click', handleCellClick)); // Disable further moves
+        });
+
+        socket.on('error', (data) => {
+            console.error('Server error:', data.message);
+            statusMessage.textContent = `Error: ${data.message}`;
+            // If it's a critical error like "User not registered", force return to lobby
+            if (data.message.includes("User not registered with server") || data.message.includes("Unauthorized move") || data.message.includes("Invalid or expired session token")) {
+                setTimeout(() => {
+                    if (window.parent) {
+                        window.parent.postMessage({ type: 'returnToLobby' }, '*');
+                    } else {
+                        // Fallback if not in iframe
+                        window.location.href = '/';
+                    }
+                }, 3000); // Give user time to read error, then return
+            }
+        });
+
+        socket.on('coins_updated', (data) => {
+            // This message is for the winner. Notify the parent window to update its display.
+            if (window.parent) {
+                window.parent.postMessage({ type: 'updateLobbyCoins', newCoins: data.new_coins }, '*');
+            }
+            console.log(`Coins updated for ${data.username}. New total: ${data.new_coins}`);
+        });
+
+        socket.on('session_invalid', (data) => {
+            alert(data.message);
+            if (window.parent) {
+                window.parent.postMessage({ type: 'returnToLobby' }, '*');
+            } else {
+                window.location.href = '/';
+            }
+        });
+
+
+        // --- Game Logic (Client-side) ---
+        function handleCellClick(event) {
+            // Ensure token is available before making a move
+            if (!userSessionToken) {
+                console.error("Session token not available. Cannot make move.");
+                statusMessage.textContent = "Error: Session expired. Please return to lobby.";
+                if (window.parent) {
+                    window.parent.postMessage({ type: 'returnToLobby' }, '*');
+                }
+                return;
+            }
+
+            if (!gameActive || currentTurn !== playerChar) {
+                return; // Not active, or not player's turn
+            }
+
+            const clickedCell = event.target;
+            const clickedCellIndex = parseInt(clickedCell.dataset.index);
+
+            if (cells[clickedCellIndex].textContent === '') {
+                // Emit move to server, including the session token
+                socket.emit('make_move', { game_id: gameId, index: clickedCellIndex, player_char: playerChar, token: userSessionToken });
+                cells.forEach(cell => cell.removeEventListener('click', handleCellClick)); // Disable clicks temporarily
+            }
+        }
+
+        // This function is called by the parent (play.html) when it wants the iframe to leave the game
+        window.addEventListener('message', (event) => {
+            if (event.data && event.data.type === 'leaveGame' && event.data.token) {
+                console.log("Multiplayer game received 'leaveGame' message from parent.");
+                userSessionToken = event.data.token; // Ensure token is set if coming from parent
+                if (gameId) {
+                    socket.emit('leave_multiplayer_game', { game_id: gameId, token: userSessionToken });
+                }
+            }
+        });
+
+        function resetGame() {
+            // This button now acts as "Return to Lobby" in multiplayer
+            // Ensure token is available before leaving game
+            if (!userSessionToken) {
+                console.error("Session token not available. Cannot leave game gracefully.");
+                if (window.parent) {
+                    window.parent.postMessage({ type: 'returnToLobby' }, '*');
+                }
+                return;
+            }
+
+            if (gameId) {
+                // Emit a leave game event to inform the server, including the session token
+                socket.emit('leave_multiplayer_game', { game_id: gameId, token: userSessionToken });
+            }
+            if (window.parent) {
+                window.parent.postMessage({ type: 'returnToLobby' }, '*');
+            } else {
+                // Fallback if not in iframe (e.g., direct access)
+                window.location.href = '/play';
+            }
+        }
+
+        // Initial setup
+        cells.forEach(cell => {
+            cell.addEventListener('click', handleCellClick);
+        });
+        resetButton.addEventListener('click', resetGame);
+        statusMessage.textContent = 'Waiting for opponent...'; // Initial status
+
+        // When the page loads, set initial game state based on URL parameters
+        // This is now done immediately at script execution, not in DOMContentLoaded.
+        // DOMContentLoaded is still used for initial UI setup.
+        document.addEventListener('DOMContentLoaded', () => {
+            // Check if essential session/game info is missing after initial parsing
+            if (!userSessionToken || !gameId || !playerChar || !opponentUsername) {
+                statusMessage.textContent = 'Error: Session or game details missing. Returning to lobby.';
+                resetButton.classList.remove('hidden');
+                resetButton.textContent = 'Return to Lobby';
+                // Force return to lobby if critical info is missing
+                setTimeout(() => {
+                    if (window.parent) {
+                        window.parent.postMessage({ type: 'returnToLobby' }, '*');
+                    } else {
+                        window.location.href = '/';
+                    }
+                }, 3000);
+                return;
+            }
+
+            // UI updates based on initial parameters
+            gameActive = true;
+            playerInfo.textContent = `You are ${playerChar}. Opponent: ${opponentUsername}`;
+            statusMessage.textContent = `It's ${currentTurn}'s turn`;
+
+            // If this client is 'X', they can make the first move
+            if (playerChar === 'X') {
+                cells.forEach(cell => cell.addEventListener('click', handleCellClick));
+            } else {
+                cells.forEach(cell => cell.removeEventListener('click', handleCellClick));
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tic-Tac-Toe AI</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #1a202c; /* Dark background */
+            color: #e2e8f0; /* Light text color */
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        .game-board {
+            display: grid;
+            grid-template-columns: repeat(3, 100px);
+            grid-template-rows: repeat(3, 100px);
+            gap: 5px;
+            background-color: #4a5568; /* Gray-600 */
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+        }
+        .cell {
+            width: 100px;
+            height: 100px;
+            background-color: #2d3748; /* Darker gray for cells */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 3em;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background-color 0.2s ease-in-out;
+            color: #e2e8f0;
+        }
+        .cell:hover:not(.x):not(.o) {
+            background-color: #4a5568; /* Lighter gray on hover */
+        }
+        .cell.x {
+            color: #4299e1; /* Blue for X */
+        }
+        .cell.o {
+            color: #ef4444; /* Red for O */
+        }
+        .status-message {
+            margin-top: 20px;
+            font-size: 1.5em;
+            font-weight: bold;
+            color: #e2e8f0;
+        }
+        .reset-button {
+            background-color: #4299e1;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-weight: bold;
+            margin-top: 20px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+        .reset-button:hover {
+            background-color: #3182ce;
+        }
+        .loading-indicator {
+            margin-top: 10px;
+            color: #a0aec0;
+            font-size: 0.9em;
+        }
+        /* Removed back-button style as it's handled by parent iframe */
+    </style>
+</head>
+<body>
+    <h1 class="text-3xl font-bold text-white mb-8">Tic-Tac-Toe AI</h1>
+
+    <div class="game-board" id="gameBoard">
+        <div class="cell" data-index="0"></div>
+        <div class="cell" data-index="1"></div>
+        <div class="cell" data-index="2"></div>
+        <div class="cell" data-index="3"></div>
+        <div class="cell" data-index="4"></div>
+        <div class="cell" data-index="5"></div>
+        <div class="cell" data-index="6"></div>
+        <div class="cell" data-index="7"></div>
+        <div class="cell" data-index="8"></div>
+    </div>
+
+    <div id="statusMessage" class="status-message"></div>
+    <div id="loadingIndicator" class="loading-indicator hidden">AI is thinking...</div>
+    <button id="resetButton" class="reset-button hidden">Play Again</button>
+
+    <script>
+        const cells = document.querySelectorAll('.cell');
+        const statusMessage = document.getElementById('statusMessage');
+        const resetButton = document.getElementById('resetButton');
+        const loadingIndicator = document.getElementById('loadingIndicator');
+
+        let board = ['', '', '', '', '', '', '', '', ''];
+        let currentPlayer = 'X'; // Player is X, AI is O
+        let gameActive = true;
+
+        // User provided API key for Gemini
+        const GEMINI_API_KEY = "AIzaSyDyvX75-cHDERnUo6_Dnr7YEScQ4XN3v0M";
+        const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`;
+
+        const winningConditions = [
+            [0, 1, 2], [3, 4, 5], [6, 7, 8], // Rows
+            [0, 3, 6], [1, 4, 7], [2, 5, 8], // Columns
+            [0, 4, 8], [2, 4, 6]             // Diagonals
+        ];
+
+        function handleCellPlayed(clickedCell, clickedCellIndex) {
+            board[clickedCellIndex] = currentPlayer;
+            clickedCell.textContent = currentPlayer;
+            clickedCell.classList.add(currentPlayer.toLowerCase());
+        }
+
+        function handleResultValidation() {
+            let roundWon = false;
+            for (let i = 0; i < winningConditions.length; i++) {
+                const winCondition = winningConditions[i];
+                let a = board[winCondition[0]];
+                let b = board[winCondition[1]];
+                let c = board[winCondition[2]];
+                if (a === '' || b === '' || c === '') {
+                    continue;
+                }
+                if (a === b && b === c) {
+                    roundWon = true;
+                    break;
+                }
+            }
+
+            if (roundWon) {
+                statusMessage.textContent = `${currentPlayer} has won!`;
+                gameActive = false;
+                resetButton.classList.remove('hidden');
+                // If player 'X' wins, send message to parent to award coins
+                if (currentPlayer === 'X' && window.parent) {
+                    window.parent.postMessage({ type: 'gameWin', coins: 10 }, '*'); // Send 10 coins
+                }
+                return true;
+            }
+
+            if (!board.includes('')) {
+                statusMessage.textContent = `Game ended in a draw!`;
+                gameActive = false;
+                resetButton.classList.remove('hidden');
+                return true;
+            }
+            return false;
+        }
+
+        function changePlayer() {
+            currentPlayer = currentPlayer === 'X' ? 'O' : 'X';
+            if (gameActive) {
+                statusMessage.textContent = `It's ${currentPlayer}'s turn`;
+            }
+        }
+
+        async function handlePlayerMove(clickedCellEvent) {
+            const clickedCell = clickedCellEvent.target;
+            const clickedCellIndex = parseInt(clickedCell.dataset.index);
+
+            if (board[clickedCellIndex] !== '' || !gameActive || currentPlayer !== 'X') {
+                return; // Only allow moves if cell is empty, game is active, and it's player's turn
+            }
+
+            handleCellPlayed(clickedCell, clickedCellIndex);
+            if (!handleResultValidation()) {
+                changePlayer();
+                if (gameActive && currentPlayer === 'O') {
+                    await handleAIMove();
+                }
+            }
+        }
+
+        async function handleAIMove() {
+            loadingIndicator.classList.remove('hidden');
+            // Disable board interaction while AI thinks
+            cells.forEach(cell => cell.removeEventListener('click', handlePlayerMove));
+
+            try {
+                const prompt = `Given this Tic-Tac-Toe board state where '' is an empty cell, 'X' is player, and 'O' is AI: ${JSON.stringify(board)}. What is the best next move for 'O'? Respond with only the index (0-8) of the empty cell to play.`;
+                let chatHistory = [];
+                chatHistory.push({ role: "user", parts: [{ text: prompt }] });
+
+                const payload = { contents: chatHistory };
+
+                const response = await fetch(GEMINI_API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                const result = await response.json();
+                let aiMoveIndex = -1;
+
+                if (result.candidates && result.candidates.length > 0 &&
+                    result.candidates[0].content && result.candidates[0].content.parts &&
+                    result.candidates[0].content.parts.length > 0) {
+                    const text = result.candidates[0].content.parts[0].text;
+                    // Attempt to parse the index from the AI's response
+                    aiMoveIndex = parseInt(text.trim());
+                }
+
+                // Validate AI's move
+                if (isNaN(aiMoveIndex) || aiMoveIndex < 0 || aiMoveIndex > 8 || board[aiMoveIndex] !== '') {
+                    console.warn("AI returned an invalid or occupied move. Falling back to random.");
+                    // Fallback to a random valid move if AI fails
+                    const availableMoves = board.map((cell, index) => cell === '' ? index : -1).filter(index => index !== -1);
+                    if (availableMoves.length > 0) {
+                        aiMoveIndex = availableMoves[Math.floor(Math.random() * availableMoves.length)];
+                    } else {
+                        // No moves left, should have been caught by handleResultValidation
+                        console.error("No available moves for AI.");
+                        return;
+                    }
+                }
+
+                const aiCell = cells[aiMoveIndex];
+                handleCellPlayed(aiCell, aiMoveIndex);
+                if (!handleResultValidation()) {
+                    changePlayer();
+                }
+
+            } catch (error) {
+                console.error('Error fetching AI move:', error);
+                statusMessage.textContent = 'Error with AI. Please reset.';
+                gameActive = false;
+                resetButton.classList.remove('hidden');
+            } finally {
+                loadingIndicator.classList.add('hidden');
+                // Re-enable board interaction after AI move
+                if (gameActive) {
+                    cells.forEach(cell => cell.addEventListener('click', handlePlayerMove));
+                }
+            }
+        }
+
+        function resetGame() {
+            board = ['', '', '', '', '', '', '', '', ''];
+            currentPlayer = 'X';
+            gameActive = true;
+            statusMessage.textContent = `It's ${currentPlayer}'s turn`;
+            resetButton.classList.add('hidden');
+            cells.forEach(cell => {
+                cell.textContent = '';
+                cell.classList.remove('x', 'o');
+                cell.addEventListener('click', handlePlayerMove, { once: true }); // Re-add event listener
+            });
+            // If AI starts, trigger AI move immediately
+            if (currentPlayer === 'O') {
+                handleAIMove();
+            }
+        }
+
+        cells.forEach(cell => {
+            cell.addEventListener('click', handlePlayerMove, { once: true });
+        });
+
+        resetButton.addEventListener('click', resetGame);
+
+        // Initial setup
+        statusMessage.textContent = `It's ${currentPlayer}'s turn`;
+    </script>
+</body>
+</html>
